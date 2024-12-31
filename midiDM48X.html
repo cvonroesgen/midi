@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+  <head>
+
+    <meta charset="UTF-8">
+    <title>WebMidi.js Quick Start</title>
+<style>
+    #notename{ font-size: 164px; }
+</style>
+    <script src="https://cdn.jsdelivr.net/npm/webmidi@latest/dist/iife/webmidi.iife.js"></script>
+
+    <script type="module">
+
+      // Enable WebMidi.js and trigger the onEnabled() function when ready.
+      WebMidi
+        .enable()
+        .then(onEnabled)
+        .catch(err => alert(err));
+
+      function onEnabled() {
+
+        if (WebMidi.inputs.length < 1) {
+            document.getElementById( "message" ).innerHTML = "No device detected.";
+        } else {
+          WebMidi.inputs.forEach((device, index) => {
+            document.getElementById( "message" ).innerHTML = `${index}: ${device.name} <br>`;
+          });
+        }
+
+        const mySynth = WebMidi.inputs[0];
+        // const mySynth = WebMidi.getInputByName("TYPE NAME HERE!")
+
+        mySynth.channels[1].addListener("noteon", e => {
+            var accidental = e.note.accidental ? e.note.accidental : "";
+            document.getElementById( "notename" ).innerHTML = `${e.note.name} ${accidental} <br>`;
+        });
+
+      }
+
+    </script>
+
+  </head>
+
+  <body>
+    <h1>WebMidi.js Quick Start</h1>
+    <div id="message"></div>
+    <div id="notename"></div>
+  </body>
+
+</html>
