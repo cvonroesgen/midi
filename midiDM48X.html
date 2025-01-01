@@ -8,7 +8,7 @@
     <title>Midi</title>
     <style>
         #notename {
-            font-size: 164px;
+            font-size: 20px;
         }
 
         #staff {
@@ -28,18 +28,15 @@
     <script type="module">
 
         // Enable WebMidi.js and trigger the onEnabled() function when ready.
-        WebMidi
-            .enable()
-            .then(onEnabled)
-            .catch(err => alert(err));
-
+        var myStaff;
+        var noteNameToNumber = { A: 9, "A#": 10, B: 11, C: 0, "C#": 1, "D": 2, "D#": 3, E: 4, "F": 5, "F#": 6, G: 7, "G#": 8 };
         function onEnabled() {
 
             if (WebMidi.inputs.length < 1) {
-                document.getElementById("message").innerHTML = "No device detected.";
+                document.getElementById("notename").innerHTML = "No device detected.";
             } else {
                 WebMidi.inputs.forEach((device, index) => {
-                    document.getElementById("message").innerHTML = `${index}: ${device.name} <br>`;
+                    window.document.title = `${index}: ${device.name}`;
                 });
             }
 
@@ -48,14 +45,17 @@
 
             mySynth.channels[1].addListener("noteon", e => {
                 var accidental = e.note.accidental ? e.note.accidental : "";
-                document.getElementById("notename").innerHTML = `${e.note.name} ${accidental} <br>`;
-                noteOnStaff();
+                document.getElementById("notename").innerHTML = `${e.note.name}${accidental}`;
+                noteOnStaff(e.note);
             });
 
         }
 
-        function noteOnStaff(note, accidental) {
-            myStaff.setNote(88);
+        function noteOnStaff(note) {
+            var accidental = note.accidental ? note.accidental : "";
+            var numericNote = noteNameToNumber[note.name + accidental] + 12 +  ((note.octave + 1) * 12);
+            myStaff.setNotes([numericNote]);
+            //document.getElementById("notename").innerHTML = numericNote;
         }
 
         window.onload = function () {
@@ -70,7 +70,11 @@
             }
 
             // create a new staff
-            var myStaff = new Staff(options)
+            myStaff = new Staff(options)
+            WebMidi
+                .enable()
+                .then(onEnabled)
+                .catch(err => alert(err));
         };
     </script>
 
@@ -78,8 +82,7 @@
 
 <body>
     <div id="staff" class="staff"></div>
-    <div id="notename"></div>
-    <div id="message"></div>
+    <div id="notename"></div>    
 </body>
 
 </html>
