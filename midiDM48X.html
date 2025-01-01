@@ -34,6 +34,7 @@
 
             if (WebMidi.inputs.length < 1) {
                 document.getElementById("notename").innerHTML = "No device detected.";
+                return;
             } else {
                 WebMidi.inputs.forEach((device, index) => {
                     window.document.title = `${index}: ${device.name}`;
