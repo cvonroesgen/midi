@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+    <title>Midi</title>
+    <style>
+        #notename {
+            font-size: 20px;
+            width: 200px;
+        }
+
+        #staff {
+            width: 100px;
+            height: 100px;
+            top: 20px;
+        }
+    </style>
+    <!-- import CSS -->
+    <link rel="stylesheet" href="https://instrumentbible.github.io/staff.js/css/staff.css" />
+
+    <!-- import JavaScript -->
+    <script src="https://instrumentbible.github.io/staff.js/js/JZZ.js"></script>
+    <script src="https://instrumentbible.github.io/staff.js/js/JZZ.input.Kbd.js"></script>
+    <script src="staff.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/webmidi@latest/dist/iife/webmidi.iife.js"></script>
+
+    <script type="module">
+
+        // Enable WebMidi.js and trigger the onEnabled() function when ready.
+        var myStaff;
+        var targetNote = 60;
+        var noteName;
+        var noteNameToNumber = { A: 9, "A#": 10, B: 11, C: 0, "C#": 1, "D": 2, "D#": 3, E: 4, "F": 5, "F#": 6, G: 7, "G#": 8 };
+        var noteNumberToName = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+        function onMidiEnabled() {
+
+            if (WebMidi.inputs.length < 1) {
+                noteName.innerHTML = "No device detected.";
+                return;
+            } else {
+                WebMidi.inputs.forEach((device, index) => {
+                    window.document.title = `${index}: ${device.name}`;
+                });
+            }
+
+            const mySynth = WebMidi.inputs[0];
+            // const mySynth = WebMidi.getInputByName("TYPE NAME HERE!")
+
+            mySynth.channels[1].addListener("noteon", e => {
+                var accidental = e.note.accidental ? e.note.accidental : "";
+                noteName.innerHTML = `<span style="color:red">${e.note.name}${accidental}</span> ${noteNumberToName[targetNote % 12]}`;
+                var accidental = e.note.accidental ? e.note.accidental : "";
+                var numericNote = noteNameToNumber[e.note.name + accidental] + ((e.note.octave + 2) * 12);
+                noteOnStaff(numericNote);
+            });
+
+        }
+
+        function noteOnStaff(numericNote) {
+
+            if (targetNote == numericNote) {
+                myStaff.setNotes([targetNote], ["green"]);
+                setTimeout(function () {
+                    targetNote = randomNote(targetNote);
+                    myStaff.setNotes([targetNote], ["black"]);
+                    noteName.innerHTML = `${noteNumberToName[targetNote % 12]}`;
+                }, 1000);
+
+            }
+            else {
+                myStaff.setNotes([targetNote, numericNote], ["black", "red"]);
+            }
+
+            //document.getElementById("notename").innerHTML = numericNote;
+        }
+
+        window.onload = function () {
+            // these are the options
+            var options = {
+                id: "myStaff",
+                at: "staff",
+                clef: "treble",
+                accidental: "sharp",
+                color: "#FF0000",
+                scroll: false,
+            }
+
+            // create a new staff
+            myStaff = new Staff(options)
+            WebMidi
+                .enable()
+                .then(onMidiEnabled)
+                .catch(err => alert(err));
+            noteOnStaff(targetNote);
+            noteName = document.getElementById("notename");
+        };
+
+        function randomNote(previousNote) {
+            var randomNote;
+            do {
+                randomNote = Math.floor(Math.random() * 25) + 60;
+            }
+            while (randomNote == previousNote)
+            return randomNote;
+        }
+    </script>
+
+</head>
+
+<body>
+    <div id="staff" class="staff"></div>
+    <div id="notename"></div>
+</body>
+
+</html>
