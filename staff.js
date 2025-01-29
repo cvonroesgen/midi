@@ -233,6 +233,7 @@ class Staff {
 						newSharp.setAttribute("class","sharp");
 						newSharp.innerHTML = "#";
 						newSharp.style.display = "block";
+						newSharp.style.fill = colors[i];
 						newGroup.appendChild(newSharp);
 						notePlacement = noteHeight[noteValue - 1];
 					}

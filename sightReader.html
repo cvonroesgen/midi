@@ -33,8 +33,10 @@
         var myStaff;
         var targetNote = 60;
         var noteName;
+        var pause = 1000;
         var noteNameToNumber = { A: 9, "A#": 10, B: 11, C: 0, "C#": 1, "D": 2, "D#": 3, E: 4, "F": 5, "F#": 6, G: 7, "G#": 8 };
         var noteNumberToName = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+        var music = ["E", "G", "C", "D", "F", "E", "D", "E", "D", "G", "E", "G", "C", "D", "E", "F", "E", "G", "C", "D", "E", "F", "E", "G", "F", "D", "C", "G", "E", "D", "C", "G", "E", "D", "C", "A"];
         function onMidiEnabled() {
 
             if (WebMidi.inputs.length < 1) {
@@ -50,27 +52,40 @@
             // const mySynth = WebMidi.getInputByName("TYPE NAME HERE!")
 
             mySynth.channels[1].addListener("noteon", e => {
-                var accidental = e.note.accidental ? e.note.accidental : "";
-                noteName.innerHTML = `<span style="color:red">${e.note.name}${accidental}</span> ${noteNumberToName[targetNote % 12]}`;
-                var accidental = e.note.accidental ? e.note.accidental : "";
-                var numericNote = noteNameToNumber[e.note.name + accidental] + ((e.note.octave + 2) * 12);
-                noteOnStaff(numericNote);
+                setTimeout(
+                    function () {
+                        var accidental = e.note.accidental ? e.note.accidental : "";
+                        //noteName.innerHTML = `<span style="color:red">${e.note.name}${accidental}</span> ${noteNumberToName[targetNote % 12]}`;
+                        var accidental = e.note.accidental ? e.note.accidental : "";
+                        var numericNote = noteNameToNumber[e.note.name + accidental] + ((e.note.octave + 2) * 12);
+                        noteOnStaff(numericNote);
+                    }, pause
+
+                );
+
+
             });
 
         }
-
+        var noteCounter = 0;
         function noteOnStaff(numericNote) {
 
             if (targetNote == numericNote) {
+                noteCounter++;
                 myStaff.setNotes([targetNote], ["green"]);
-                setTimeout(function () {
-                    targetNote = randomNote(targetNote);
-                    myStaff.setNotes([targetNote], ["black"]);
-                    noteName.innerHTML = `${noteNumberToName[targetNote % 12]}`;
-                }, 1000);
-
+                if (noteCounter > 2) {
+                    noteCounter = 0;
+                    pause = 1000;
+                    setTimeout(function () {
+                        targetNote = nextNote(targetNote);
+                        myStaff.setNotes([targetNote], ["black"]);
+                        //noteName.innerHTML = `${noteNumberToName[targetNote % 12]}`;
+                        pause = 0;
+                    }, pause);
+                }
             }
             else {
+                noteCounter = 0;
                 myStaff.setNotes([targetNote, numericNote], ["black", "red"]);
             }
 
@@ -97,13 +112,22 @@
             noteOnStaff(targetNote);
             noteName = document.getElementById("notename");
         };
-
-        function randomNote(previousNote) {
+        var musicCounter = 0;
+        function nextNote(previousNote) {
+            if (false) {
+                var note = noteNameToNumber[music[musicCounter]];
+                musicCounter++;
+                if(musicCounter >= music.length)
+                    {
+                        musicCounter = 0;
+                    }
+                return note + 60;
+            }
             var randomNote;
             do {
                 randomNote = Math.floor(Math.random() * 25) + 60;
             }
-            while (randomNote == previousNote)
+            while (randomNote == previousNote || (noteNumberToName[randomNote % 12].length > 1))
             return randomNote;
         }
     </script>
