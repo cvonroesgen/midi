@@ -54,7 +54,7 @@
 
         function noteOnStaff(note) {
             var accidental = note.accidental ? note.accidental : "";
-            var numericNote = noteNameToNumber[note.name + accidental] + 12 +  ((note.octave + 1) * 12);
+            var numericNote = noteNameToNumber[note.name + accidental] + ((note.octave + 1) * 12);
             myStaff.setNotes([numericNote]);
             //document.getElementById("notename").innerHTML = numericNote;
         }
