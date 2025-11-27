@@ -49,7 +49,18 @@
                 document.getElementById("notename").innerHTML = `${e.note.name}${accidental}`;
                 noteOnStaff(e.note);
             });
-
+            mySynth.channels[1].addListener("midimessage", e => {
+                console.log("Raw MIDI message received:", e.data);
+                
+                // e.data is a Uint8Array with the raw MIDI bytes
+                // Example parsing (optional, WebMidi.js handles most specific events):
+                const command = e.data[0] >> 4;
+                const channel = (e.data[0] & 0x0f) + 1;
+                const note = e.data[1];
+                const velocity = e.data[2];
+                
+                console.log(`Command: ${command}, Channel: ${channel}, Note: ${note}, Velocity: ${velocity}`);
+            });
         }
 
         function noteOnStaff(note) {
