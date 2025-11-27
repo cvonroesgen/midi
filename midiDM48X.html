@@ -37,29 +37,20 @@
                 return;
             } else {
                 WebMidi.inputs.forEach((device, index) => {
-                    window.document.title = `${index}: ${device.name}`;
+                    window.document.title += ` ${index}: ${device.name}`;
                 });
             }
 
-            const mySynth = WebMidi.inputs[0];
-            // const mySynth = WebMidi.getInputByName("TYPE NAME HERE!")
-
-            mySynth.channels[1].addListener("noteon", e => {
-                var accidental = e.note.accidental ? e.note.accidental : "";
-                document.getElementById("notename").innerHTML = `${e.note.name}${accidental}`;
-                noteOnStaff(e.note);
-            });
-            mySynth.channels[1].addListener("midimessage", e => {
-                console.log("Raw MIDI message received:", e.data);
-                
-                // e.data is a Uint8Array with the raw MIDI bytes
-                // Example parsing (optional, WebMidi.js handles most specific events):
-                const command = e.data[0] >> 4;
-                const channel = (e.data[0] & 0x0f) + 1;
-                const note = e.data[1];
-                const velocity = e.data[2];
-                
-                console.log(`Command: ${command}, Channel: ${channel}, Note: ${note}, Velocity: ${velocity}`);
+            WebMidi.enable(() => {
+                WebMidi.inputs.forEach((input) => {
+                    input.addListener('noteon', 'all', (e) => 
+                    {
+                        var accidental = e.note.accidental ? e.note.accidental : "";
+                        document.getElementById("notename").innerHTML = `${e.note.name}${accidental}`;
+                        noteOnStaff(e.note);
+                    }
+                );
+                });
             });
         }
 
