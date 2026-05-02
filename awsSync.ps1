@@ -1,0 +1,2 @@
+aws s3 sync C:\Users\claud\Documents\fun\midi\ s3://qunect.com/midi/ --exclude `"*`" --include `"DM48XTuningConfigurator.html`" --acl public-read
+aws cloudfront create-invalidation --distribution-id E14KCZOKPJY2AO --paths /midi/DM48XTuningConfigurator.html

@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>DM48X Tuning Configurator</title>
+
+
+	<style>
+		:root {
+			--bg: #f4f5f7;
+			--panel: #ffffff;
+			--text: #1f2937;
+			--muted: #6b7280;
+			--accent: #0f766e;
+			--accent-2: #115e59;
+			--border: #d1d5db;
+		}
+
+		* {
+			box-sizing: border-box;
+		}
+
+		body {
+			margin: 0;
+			font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+			color: var(--text);
+			background: linear-gradient(145deg, #e8eef4 0%, #f9fafb 100%);
+			padding: 20px;
+		}
+
+		.container {
+			max-width: 1400px;
+			margin: 0 auto;
+			background: var(--panel);
+			border: 1px solid var(--border);
+			border-radius: 12px;
+			padding: 20px;
+			box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+		}
+
+		h1 {
+			margin: 0 0 14px 0;
+			font-size: 1.5rem;
+		}
+
+		.controls {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: center;
+			gap: 12px;
+			margin-bottom: 18px;
+		}
+
+		.controls label {
+			font-weight: 600;
+		}
+
+		select,
+		button {
+			border: 1px solid var(--border);
+			border-radius: 8px;
+			padding: 8px 10px;
+			font-size: 14px;
+			background: #fff;
+		}
+
+		button {
+			background: var(--accent);
+			color: #fff;
+			border-color: var(--accent);
+			cursor: pointer;
+			font-weight: 600;
+		}
+
+		button:hover {
+			background: var(--accent-2);
+			border-color: var(--accent-2);
+		}
+
+		button:disabled {
+			background: #9ca3af;
+			border-color: #9ca3af;
+			cursor: not-allowed;
+		}
+
+		.group {
+			margin-bottom: 16px;
+			padding: 14px;
+			border: 1px solid var(--border);
+			border-radius: 10px;
+			background: #fbfdff;
+		}
+
+		.group h2 {
+			margin: 0 0 10px 0;
+			font-size: 1rem;
+			color: #111827;
+		}
+
+		.notes-row {
+			display: grid;
+			grid-template-columns: repeat(12, minmax(70px, 1fr));
+			gap: 8px;
+			overflow-x: auto;
+			padding-bottom: 4px;
+		}
+
+		.note-select {
+			min-width: 70px;
+		}
+
+		.status {
+			margin-top: 6px;
+			font-size: 0.9rem;
+			color: var(--muted);
+			min-height: 1.2em;
+		}
+
+		.order-note {
+			font-size: 0.88rem;
+			color: var(--muted);
+			margin-bottom: 10px;
+		}
+
+
+
+		@media (max-width: 900px) {
+			.notes-row {
+				grid-template-columns: repeat(12, 90px);
+			}
+		}
+	</style>
+</head>
+<body>
+	<div class="container">
+		<h1>DM48X Tuning Configurator</h1>
+
+		<div class="controls">
+			<label for="outputSelect">MIDI output device:</label>
+			<select id="outputSelect"></select>
+			<label for="rowTransposeSelect">Transpose half steps:</label>
+			<select id="rowTransposeSelect"></select>
+			<button id="receiveModeButton" type="button">Start Receive Mode</button>
+			<button id="copyRowsButton" type="button">Copy Rows 1-2 to 3-4</button>
+			<button id="fillOctavesButton" type="button">Fill Octave Pattern</button>
+			<button id="playButton" type="button">Play 48-note Sequence</button>
+		</div>
+
+		<div class="order-note">
+			Playback order: Blow button out, Draw button out, Blow button in, Draw button in. Each group plays left to right.
+		</div>
+
+		<div id="groupsHost"></div>
+		<div id="status" class="status">Initializing hardware MIDI...</div>
+	</div>
+
+	<script>
+		(function () {
+			var GROUPS = [
+				{ id: "blowOut", title: "Blow button out" },
+				{ id: "drawOut", title: "Draw button out" },
+				{ id: "blowIn", title: "Blow button in" },
+				{ id: "drawIn", title: "Draw button in" }
+			];
+
+			var NOTES_PER_GROUP = 12;
+			var DEFAULT_VELOCITY = 110;
+			var NOTE_STEP_MS = 320;
+			var NOTE_LENGTH_MS = 280;
+			var MIDI_CHANNEL = 0;
+
+			var statusEl = document.getElementById("status");
+			var groupsHost = document.getElementById("groupsHost");
+			var outputSelect = document.getElementById("outputSelect");
+			var rowTransposeSelect = document.getElementById("rowTransposeSelect");
+			var receiveModeButton = document.getElementById("receiveModeButton");
+			var copyRowsButton = document.getElementById("copyRowsButton");
+			var fillOctavesButton = document.getElementById("fillOctavesButton");
+			var playButton = document.getElementById("playButton");
+
+			var playableNotes = [];
+			var midiAccess = null;
+			var activeOutput = null;
+			var isReceiveMode = false;
+			var receiveIndex = 0;
+			var receiveTargets = [];
+
+			function setStatus(message) {
+				statusEl.textContent = message;
+			}
+
+			function toNoteName(noteNumber) {
+				var names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+				var octave = Math.floor(noteNumber / 12) - 1;
+				return names[noteNumber % 12] + octave;
+			}
+
+			function buildNoteList() {
+				var notes = [];
+				for (var noteNumber = 36; noteNumber <= 96; noteNumber++) {
+					notes.push({ number: noteNumber, label: toNoteName(noteNumber) });
+				}
+				return notes;
+			}
+
+			function buildTransposeOptions() {
+				rowTransposeSelect.innerHTML = "";
+				for (var steps = -24; steps <= 24; steps++) {
+					var option = document.createElement("option");
+					option.value = String(steps);
+					if (steps > 0) {
+						option.textContent = "+" + steps + " semitones";
+					} else if (steps < 0) {
+						option.textContent = steps + " semitones";
+					} else {
+						option.textContent = "0 semitones";
+					}
+
+					if (steps === 12) {
+						option.selected = true;
+					}
+
+					rowTransposeSelect.appendChild(option);
+				}
+			}
+
+			function getMinPlayableNote() {
+				return playableNotes[0].number;
+			}
+
+			function getMaxPlayableNote() {
+				return playableNotes[playableNotes.length - 1].number;
+			}
+
+			function clampPlayableNote(noteNumber) {
+				if (noteNumber < getMinPlayableNote()) {
+					return getMinPlayableNote();
+				}
+				if (noteNumber > getMaxPlayableNote()) {
+					return getMaxPlayableNote();
+				}
+				return noteNumber;
+			}
+
+			function getAllNoteSelectsInUiOrder() {
+				var result = [];
+				var groupEls = groupsHost.querySelectorAll(".group");
+				for (var g = 0; g < groupEls.length; g++) {
+					var selects = groupEls[g].querySelectorAll(".note-select");
+					for (var s = 0; s < selects.length; s++) {
+						result.push(selects[s]);
+					}
+				}
+				return result;
+			}
+
+			function setReceiveModeButtonLabel() {
+				receiveModeButton.textContent = isReceiveMode ? "Stop Receive Mode" : "Start Receive Mode";
+			}
+
+			function setInputMessageHandlers(handler) {
+				if (!midiAccess) {
+					return;
+				}
+				var inputs = Array.from(midiAccess.inputs.values());
+				for (var i = 0; i < inputs.length; i++) {
+					inputs[i].onmidimessage = handler;
+				}
+			}
+
+			function stopReceiveMode(statusMessage) {
+				isReceiveMode = false;
+				setInputMessageHandlers(null);
+				setReceiveModeButtonLabel();
+				if (statusMessage) {
+					setStatus(statusMessage);
+				}
+			}
+
+			function handleReceiveMidiMessage(event) {
+				if (!isReceiveMode || receiveIndex >= receiveTargets.length) {
+					return;
+				}
+
+				var data = event.data || [];
+				if (data.length < 3) {
+					return;
+				}
+
+				var status = data[0] & 0xF0;
+				var note = data[1];
+				var velocity = data[2];
+
+				if (status !== 0x90 || velocity === 0) {
+					return;
+				}
+
+				var clampedNote = clampPlayableNote(note);
+				receiveTargets[receiveIndex].value = String(clampedNote);
+				receiveIndex += 1;
+
+				if (receiveIndex >= receiveTargets.length) {
+					stopReceiveMode("Receive complete: captured 48 notes into all dropdowns.");
+					return;
+				}
+
+				setStatus("Receive mode: captured " + receiveIndex + " of " + receiveTargets.length + " notes.");
+			}
+
+			function toggleReceiveMode() {
+				if (!midiAccess) {
+					setStatus("MIDI system is not ready yet.");
+					return;
+				}
+
+				if (isReceiveMode) {
+					stopReceiveMode("Receive mode stopped.");
+					return;
+				}
+
+				var inputCount = Array.from(midiAccess.inputs.values()).length;
+				if (!inputCount) {
+					setStatus("No MIDI input devices found.");
+					return;
+				}
+
+				receiveTargets = getAllNoteSelectsInUiOrder();
+				receiveIndex = 0;
+				isReceiveMode = true;
+				setInputMessageHandlers(handleReceiveMidiMessage);
+				setReceiveModeButtonLabel();
+				setStatus("Receive mode active: play 48 notes now. Filling left-to-right, top-to-bottom.");
+			}
+
+			function refreshOutputDevices() {
+				outputSelect.innerHTML = "";
+				var outputs = Array.from(midiAccess.outputs.values());
+
+				if (!outputs.length) {
+					var noneOption = document.createElement("option");
+					noneOption.value = "";
+					noneOption.textContent = "No MIDI output device found";
+					noneOption.selected = true;
+					outputSelect.appendChild(noneOption);
+					activeOutput = null;
+					playButton.disabled = true;
+					setStatus("Connect a hardware MIDI output device, then refresh/reopen this page.");
+					return;
+				}
+
+				for (var i = 0; i < outputs.length; i++) {
+					var output = outputs[i];
+					var option = document.createElement("option");
+					option.value = output.id;
+					option.textContent = output.name || ("MIDI Output " + (i + 1));
+					outputSelect.appendChild(option);
+				}
+
+				activeOutput = outputs[0];
+				outputSelect.value = activeOutput.id;
+				playButton.disabled = false;
+				setStatus("Ready. Choose notes and press Play to send to hardware MIDI.");
+			}
+
+			function createNoteSelect(groupIndex, noteIndex) {
+				var select = document.createElement("select");
+				select.className = "note-select";
+				select.dataset.group = String(groupIndex);
+				select.dataset.index = String(noteIndex);
+
+				for (var i = 0; i < playableNotes.length; i++) {
+					var option = document.createElement("option");
+					option.value = String(playableNotes[i].number);
+					option.textContent = playableNotes[i].label;
+					select.appendChild(option);
+				}
+
+				var defaultIndex = Math.min(groupIndex * 2 + noteIndex, playableNotes.length - 1);
+				select.selectedIndex = defaultIndex;
+				return select;
+			}
+
+			function buildGroups() {
+				for (var g = 0; g < GROUPS.length; g++) {
+					var group = document.createElement("section");
+					group.className = "group";
+					group.dataset.groupId = GROUPS[g].id;
+
+					var title = document.createElement("h2");
+					title.textContent = GROUPS[g].title;
+					group.appendChild(title);
+
+					var row = document.createElement("div");
+					row.className = "notes-row";
+
+					for (var n = 0; n < NOTES_PER_GROUP; n++) {
+						row.appendChild(createNoteSelect(g, n));
+					}
+
+					group.appendChild(row);
+					groupsHost.appendChild(group);
+				}
+			}
+
+			function collectPlaybackSequence() {
+				var fullSequence = [];
+				var groupEls = groupsHost.querySelectorAll(".group");
+
+				for (var g = 0; g < groupEls.length; g++) {
+					var selects = groupEls[g].querySelectorAll(".note-select");
+					for (var s = 0; s < selects.length; s++) {
+						fullSequence.push(parseInt(selects[s].value, 10));
+					}
+				}
+
+				return fullSequence;
+			}
+
+			function applyOctavePatternToRow(selects) {
+				if (selects.length !== NOTES_PER_GROUP) {
+					return;
+				}
+
+				var baseNotes = [];
+				for (var i = 0; i < 3; i++) {
+					baseNotes.push(parseInt(selects[i].value, 10));
+				}
+
+				for (var block = 1; block < 4; block++) {
+					for (var noteIdx = 0; noteIdx < 3; noteIdx++) {
+						var targetIndex = (block * 3) + noteIdx;
+						var transposed = clampPlayableNote(baseNotes[noteIdx] + (12 * block));
+						selects[targetIndex].value = String(transposed);
+					}
+				}
+			}
+
+			function fillOctavePattern() {
+				var groupEls = groupsHost.querySelectorAll(".group");
+				for (var g = 0; g < groupEls.length; g++) {
+					var selects = Array.from(groupEls[g].querySelectorAll(".note-select"));
+					applyOctavePatternToRow(selects);
+				}
+
+				setStatus("Applied octave pattern to each row: holes 1-3 base, 4-6 +1 octave, 7-9 +2 octaves, 10-12 +3 octaves.");
+			}
+
+			function copyTopRowsToBottomRows() {
+				var groupEls = groupsHost.querySelectorAll(".group");
+				if (groupEls.length < 4) {
+					setStatus("Not enough rows to perform copy.");
+					return;
+				}
+
+				var semitoneOffset = parseInt(rowTransposeSelect.value, 10);
+				var rowMappings = [
+					{ source: 0, target: 2 },
+					{ source: 1, target: 3 }
+				];
+
+				for (var m = 0; m < rowMappings.length; m++) {
+					var sourceSelects = Array.from(groupEls[rowMappings[m].source].querySelectorAll(".note-select"));
+					var targetSelects = Array.from(groupEls[rowMappings[m].target].querySelectorAll(".note-select"));
+
+					for (var i = 0; i < NOTES_PER_GROUP; i++) {
+						var sourceNote = parseInt(sourceSelects[i].value, 10);
+						var transposed = clampPlayableNote(sourceNote + semitoneOffset);
+						targetSelects[i].value = String(transposed);
+					}
+				}
+
+				setStatus("Copied rows 1-2 to rows 3-4 with transpose " + (semitoneOffset >= 0 ? "+" : "") + semitoneOffset + " semitones.");
+			}
+
+			function playSequence() {
+				if (!activeOutput) {
+					setStatus("No hardware MIDI output selected.");
+					return;
+				}
+
+				var sequence = collectPlaybackSequence();
+				var baseTime = window.performance.now() + 30;
+
+				for (var i = 0; i < sequence.length; i++) {
+					var note = sequence[i];
+					var noteOnTime = baseTime + (i * NOTE_STEP_MS);
+					var noteOffTime = noteOnTime + NOTE_LENGTH_MS;
+					activeOutput.send([0x90 + MIDI_CHANNEL, note, DEFAULT_VELOCITY], noteOnTime);
+					activeOutput.send([0x80 + MIDI_CHANNEL, note, 0], noteOffTime);
+				}
+
+				setStatus("Playing on hardware output '" + activeOutput.name + "'.");
+
+				window.setTimeout(function () {
+					setStatus("Playback complete.");
+				}, sequence.length * NOTE_STEP_MS + 250);
+			}
+
+			function bindEvents() {
+				playButton.addEventListener("click", playSequence);
+				receiveModeButton.addEventListener("click", toggleReceiveMode);
+				copyRowsButton.addEventListener("click", copyTopRowsToBottomRows);
+				fillOctavesButton.addEventListener("click", fillOctavePattern);
+
+				outputSelect.addEventListener("change", function () {
+					activeOutput = midiAccess.outputs.get(outputSelect.value) || null;
+					if (activeOutput) {
+						setStatus("Output selected: " + activeOutput.name + ".");
+						playButton.disabled = false;
+					} else {
+						setStatus("No valid MIDI output selected.");
+						playButton.disabled = true;
+					}
+				});
+			}
+
+				function initializeHardwareMIDI() {
+				if (!navigator.requestMIDIAccess) {
+					setStatus("Web MIDI is not supported in this browser. Use a Chromium-based browser with MIDI enabled.");
+					playButton.disabled = true;
+					receiveModeButton.disabled = true;
+					outputSelect.disabled = true;
+
+					return;
+				}
+
+				navigator.requestMIDIAccess({ sysex: false }).then(function (access) {
+					midiAccess = access;
+					refreshOutputDevices();
+					midiAccess.onstatechange = function () {
+						refreshOutputDevices();
+						if (isReceiveMode) {
+							setInputMessageHandlers(handleReceiveMidiMessage);
+						}
+					};
+				}).catch(function (err) {
+					setStatus("Could not access MIDI devices: " + err);
+					playButton.disabled = true;
+					receiveModeButton.disabled = true;
+				});
+			}
+
+			function initialize() {
+				buildTransposeOptions();
+				playableNotes = buildNoteList();
+				buildGroups();
+				bindEvents();
+				setReceiveModeButtonLabel();
+				initializeHardwareMIDI();
+			}
+
+			initialize();
+		})();
+	</script>
+</body>
+</html>
